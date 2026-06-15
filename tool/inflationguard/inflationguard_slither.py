@@ -183,10 +183,13 @@ def analyze(target):
 
 def main():
     import json
-    args = [a for a in sys.argv[1:] if a != "--json"]
     as_json = "--json" in sys.argv
+    exclude_path = next((a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--exclude-path=")), None)
+    args = [a for a in sys.argv[1:] if a != "--json" and not a.startswith("--exclude-path=")]
     target = args[0] if args else "."
     findings = analyze(target)
+    if exclude_path:
+        findings = [f for f in findings if exclude_path not in f.file]
 
     if as_json:
         # Machine-readable output consumed by synthesize_invariant.py --from-finding

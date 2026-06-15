@@ -33,7 +33,7 @@ jobs:
         run: semgrep --error --config tool/inflationguard/semgrep/inflationguard.yml src/safe/
 
       - name: Static detection (Slither) - fails CI on any HIGH finding
-        run: python3 tool/inflationguard/inflationguard_slither.py .
+        run: python3 tool/inflationguard/inflationguard_slither.py . --exclude-path=src/vulnerable
 
       - name: Synthesize invariant suite
         run: python3 tool/inflationguard/synthesize_invariant.py
