@@ -1,0 +1,51 @@
+# InflationGuard runs shift-left, in CI - the donation/rounding-inflation bug
+# class never reaches mainnet because the PR that introduces it fails this gate.
+name: InflationGuard
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  inflationguard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install detectors
+        run: pip install semgrep slither-analyzer
+
+      - name: Build
+        run: forge build
+
+      - name: Exploit reproduction (and fix blocks it)
+        run: forge test --match-contract ExploitTest -vv
+
+      - name: Static detection (Semgrep)
+        run: semgrep --error --config tool/inflationguard/semgrep/inflationguard.yml src/
+
+      - name: Static detection (Slither) - fails CI on any HIGH finding
+        run: python3 tool/inflationguard/inflationguard_slither.py .
+
+      - name: Synthesize invariant suite
+        run: python3 tool/inflationguard/synthesize_invariant.py
+
+      - name: Prove invariant passes on the fix
+        run: forge test --match-contract InflationGuardVaultInvariant
+
+      - name: Prove invariant catches the historic bug
+        run: |
+          if GUARD_TARGET=vulnerable forge test --match-contract InflationGuardVaultInvariant; then
+            echo "::error::invariant did not catch the vulnerable contract"; exit 1
+          fi
+
+      - name: Mutation gate
+        run: python3 tool/mutation/mutate.py

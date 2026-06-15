@@ -1,0 +1,18 @@
+# Compiler files
+cache/
+out/
+
+# Ignores development broadcast logs
+!/broadcast
+/broadcast/*/31337/
+/broadcast/**/dry-run/
+
+# Dotenv file
+.env
+
+# OS noise
+.DS_Store
+
+# Presentation and docs — local only, not pushed to GitHub
+docs/
+presentation/

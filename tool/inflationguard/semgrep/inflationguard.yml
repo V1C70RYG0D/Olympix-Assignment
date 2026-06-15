@@ -1,0 +1,98 @@
+# InflationGuard - Semgrep ruleset for donation / rounding share-inflation bugs.
+#
+# These rules are the cheap, portable "first line" of the detector. They are
+# deliberately structural (high signal, low noise) and target the three code
+# shapes shared by zkLend (Feb 2025), Resupply (Jun 2025) and the ERC-4626
+# first-depositor lineage. The Slither detector (../inflationguard_slither.py)
+# adds the dataflow/semantic checks Semgrep cannot express.
+#
+#   Run:  semgrep --config tool/inflationguard/semgrep/inflationguard.yml src/
+rules:
+  # ---------------------------------------------------------------------------
+  # R1 - Price / total-assets read from a DONATABLE live balance.
+  #      The root cause: anyone can `transfer` tokens to the contract and move
+  #      the price per share. Use internal accounting instead.
+  # ---------------------------------------------------------------------------
+  - id: inflationguard-donatable-price-source
+    languages: [solidity]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-682: Incorrect Calculation"
+      references:
+        - https://blocksecteam.medium.com/blocksec-in-depth-analysis-and-reflections-on-the-resupply-protocol-attack-incident-932be23e1433
+        - https://www.openzeppelin.com/news/a-novel-defense-against-erc4626-inflation-attacks
+      incidents: ["zkLend 2025-02", "Resupply 2025-06", "Sonne 2024-05"]
+    message: >-
+      A value is RETURNED directly from a live token balance
+      (`return ...balanceOf(address(this))`). When this feeds a share price /
+      total-assets, it is DONATABLE: an attacker transfers tokens to the contract
+      to inflate price-per-share without minting shares, the precondition for
+      every donation/first-depositor inflation attack. Track assets in a storage
+      variable updated on deposit/withdraw instead of reading the balance.
+    # Scoped to the RETURN form (the high-signal price-source case) to avoid
+    # tripping on benign self-balance reads (fee accounting, sweeps). The Slither
+    # layer catches the indirect cases (balance read into a var, then divided).
+    pattern: return $TOKEN.balanceOf(address(this));
+
+  # ---------------------------------------------------------------------------
+  # R2 - Inverse exchange rate by truncating division with no zero-guard.
+  #      `1e36 / price` (Resupply) floors to 0 when price > 1e36, silently
+  #      disabling the LTV / solvency check.
+  # ---------------------------------------------------------------------------
+  - id: inflationguard-inverse-rate-floor-to-zero
+    languages: [solidity]
+    severity: ERROR
+    metadata:
+      category: security
+      cwe: "CWE-682: Incorrect Calculation"
+      references:
+        - https://olympixai.medium.com/resupply-exploit-post-mortem-how-9-56m-was-stolen-in-90-minutes-75eced577077
+      incidents: ["Resupply 2025-06"]
+    message: >-
+      Exchange rate computed as `CONST / price` via truncating integer division.
+      If `price` exceeds the numerator the rate floors to ZERO, and any
+      downstream `debt * rate` solvency term becomes 0, passing for an
+      arbitrarily large borrow (Resupply, Jun 2025, ~$9.56M). Guard with
+      `require(rate > 0)` AND bound `price`, and do not derive `price` from a
+      donatable vault.
+    patterns:
+      - pattern: $N / $PRICE
+      - metavariable-pattern:
+          metavariable: $N
+          patterns:
+            - pattern-either:
+                - pattern: RATE_PRECISION
+                - pattern: "1e36"
+      - pattern-not-inside: |
+          function $F(...) {
+            ...
+            require($R > 0, ...);
+            ...
+          }
+
+  # ---------------------------------------------------------------------------
+  # R3 - Deposit mints shares but never asserts `shares > 0`.
+  #      Lets a real, non-zero deposit round down to zero shares (donated to
+  #      existing holders) - the victim side of the first-depositor attack.
+  # ---------------------------------------------------------------------------
+  - id: inflationguard-deposit-missing-nonzero-shares-check
+    languages: [solidity]
+    severity: WARNING
+    metadata:
+      category: security
+      incidents: ["ERC-4626 first-depositor", "Sonne 2024-05"]
+    message: >-
+      A deposit computes `shares` then transfers assets in without
+      `require(shares > 0)`. On an inflated/near-empty vault, floor division can
+      mint ZERO shares for a non-zero deposit, silently donating the depositor's
+      funds to existing share holders. Require non-zero shares (and use virtual
+      shares).
+    patterns:
+      - pattern: $SHARES = convertToShares($A)
+      - pattern-not-inside: |
+          function $F(...) {
+            ...
+            require($SHARES > 0, ...);
+            ...
+          }
