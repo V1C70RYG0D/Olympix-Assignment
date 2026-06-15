@@ -1,6 +1,6 @@
 # InflationGuard
 
-Catches the donation / rounding share-inflation bug class before it ships. This is the pattern behind zkLend (~$9.5M, Feb 2025), Resupply (~$9.56M, Jun 2025), Sonne, Hundred, and Onyx — the same root cause surfacing at a different layer each time.
+Catches the donation / rounding share-inflation bug class before it ships. This is the pattern behind zkLend (~ $9.5M, Feb 2025), Resupply (~ $9.56M, Jun 2025), Sonne, Hundred, and Onyx — the same root cause surfacing at a different layer each time.
 
 I didn't pick one exploit. I picked the pattern that keeps producing them, reproduced two of its most recent instances as runnable Foundry PoCs, and built a four-stage tool that flags it statically, auto-generates the property test that would have caught it, proves that test passes on the fix and fails on the bug, and then uses mutation testing to confirm the fix is actually exercised.
 
