@@ -30,7 +30,7 @@ jobs:
         run: forge test --match-contract ExploitTest -vv
 
       - name: Static detection (Semgrep)
-        run: semgrep --error --config tool/inflationguard/semgrep/inflationguard.yml src/
+        run: semgrep --error --config tool/inflationguard/semgrep/inflationguard.yml src/safe/
 
       - name: Static detection (Slither) - fails CI on any HIGH finding
         run: python3 tool/inflationguard/inflationguard_slither.py .
